@@ -6,7 +6,6 @@
  * Tests: tests/node.test.js
  */
 import * as mat4 from '../math/mat4.js';
-import { todo } from '../math/todo.js';
 
 // A literal identity so nodes can be created before mat4.identity() exists.
 const I = () => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
@@ -40,7 +39,9 @@ export class SceneNode {
    * @param {Float32Array} [parentWorld]  world matrix of the parent (identity for the root)
    */
   updateWorld(parentWorld) {
-    return todo('SceneNode.updateWorld');
+    const parent = parentWorld ?? (this.parent ? this.parent.world : null);
+    this.world = parent ? mat4.multiply(parent, this.local) : new Float32Array(this.local);
+    for (const child of this.children) child.updateWorld(this.world);
   }
 
   /** Visit this node and all descendants depth-first: fn(node, depth). */

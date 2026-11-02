@@ -18,11 +18,32 @@
  * The painting quad spans x ∈ [−a, a], y ∈ [−1, 1] at z = 0 (a = image
  * width / height), so  u = (x + a) / (2a)  and  v = (1 − y) / 2.
  */
-import { todo } from '../math/todo.js';
 
-/** TODO (Part D): build the object above from your curve data. */
+/**
+ * @param {{
+ *   painting: string,
+ *   kind: 'bezier-c1' | 'catmull-rom' | 'bspline',
+ *   aspect: number,
+ *   segments?: number[][][],   // world or painting-plane [x,y] / [x,y,z]
+ *   points?: number[][],
+ * }} curve
+ */
 export function curveToJSON(curve) {
-  return todo('curveToJSON');
+  const a = curve.aspect;
+  const toUV = (p) => {
+    const x = p[0], y = p[1];
+    const u = (x + a) / (2 * a);
+    const v = (1 - y) / 2;
+    return [+u.toFixed(6), +v.toFixed(6)];
+  };
+
+  const out = { painting: curve.painting, kind: curve.kind };
+  if (curve.kind === 'bezier-c1' && curve.segments) {
+    out.segments = curve.segments.map((seg) => seg.map(toUV));
+  } else if (curve.points) {
+    out.points = curve.points.map(toUV);
+  }
+  return out;
 }
 
 /** Provided: save any object as a .json download in the browser. */
