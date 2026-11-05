@@ -30,6 +30,8 @@ npm test           # maths / scene-graph unit tests
 | Part D | parameter t | Sample point / de Casteljau construction / rider position. |
 | Part D | de Casteljau / control polygon | Debug drawings on the painting plane. |
 | Part D | animate along curve | Advance `t` and ride the curve (orientation follows the tangent). |
+| Part D | extrude surface (bonus) | Extrude the curve along +z into a lit solid ribbon mesh. |
+| Part D | extrude width / depth | Cross-section width and extrusion depth of the bonus mesh. |
 | Part D | export JSON | Download control points in normalised painting UV (handout format). |
 
 ### Pointer
@@ -47,13 +49,19 @@ rewrites a download in the same handout format.
 ## Project layout
 
 ```
-src/math/     vec3, mat4, curves          (Parts A, C, D)
-src/scene/    node, camera, scene, export (Parts B, C, D)
+src/math/     vec3, mat4, curves, extrude   (Parts A, C, D + bonus)
+src/scene/    node, camera, scene, export   (Parts B, C, D)
 src/render/   WebGPU device, painting, mesh / line drawers
 src/ui/       panel, stats, pointer input
 ```
 
 Convention used everywhere after Part A: **M = T · R · S** (scale first, then rotate, then translate).
+
+## Bonus — curve extrusion
+
+The active Part D curve is sampled and extruded along the painting normal (`+z`) into a
+rectangular solid ribbon (`src/math/extrude.js`), rendered as a triangle mesh with normals.
+Toggle and width/depth are under **Part D**. Dragging control points rebuilds the mesh live.
 
 ## Tests
 

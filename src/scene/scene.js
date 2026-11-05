@@ -13,6 +13,7 @@ import * as curves from '../math/curves.js';
 import { SceneNode } from './node.js';
 import { createMeshDrawer, createLineDrawer } from '../render/mesh.js';
 import { curveToJSON, downloadJSON, ctrlFromJSON } from './curveExport.js';
+import { extrudeCurveAlongZ, sampleCurveForExtrusion } from '../math/extrude.js';
 import savedCurve from '../../curve.json';
 
 function mulAll(...ms) {
@@ -212,6 +213,10 @@ export function createScene({ gpu, renderer, painting, panel, camera, getPaintin
     showCasteljau: false,
     showPolygon: true,
     animateCurve: false,
+    // Bonus: extrude the curve along +z into a solid ribbon mesh
+    showExtrusion: true,
+    extrudeWidth: 0.055,
+    extrudeDepth: 0.32,
     ctrl: defaultBezierPoints(painting.aspect),
     dragIndex: -1,
   };
@@ -253,6 +258,23 @@ export function createScene({ gpu, renderer, painting, panel, camera, getPaintin
   // rider on the curve
   const riderSlot = meshes.alloc();
   const handleSlots = Array.from({ length: 16 }, () => meshes.alloc());
+  const extrudeSlot = meshes.alloc();
+  let extrudeMesh = { vertices: new Float32Array(0), triangleCount: 0 };
+  let extrudeDirty = true;
+
+  function rebuildExtrusion() {
+    const { points, tangents } = sampleCurveForExtrusion(
+      (u) => evalCurve(state, u),
+      (u) => tangentAt(state, u),
+      72,
+    );
+    extrudeMesh = extrudeCurveAlongZ(points, tangents, {
+      width: state.extrudeWidth,
+      depth: state.extrudeDepth,
+      z0: 0.012,
+    });
+    extrudeDirty = false;
+  }
 
   /* ---------------- UI ---------------- */
   const fa = panel.folder('Part A · Transforms');
@@ -277,11 +299,14 @@ export function createScene({ gpu, renderer, painting, panel, camera, getPaintin
   fd.select('curve', [
     { value: 'bezier-c1', label: 'piecewise Bézier (C¹)' },
     { value: 'catmull-rom', label: 'Catmull–Rom' },
-  ], state.curveKind, (v) => { state.curveKind = v; });
+  ], state.curveKind, (v) => { state.curveKind = v; extrudeDirty = true; });
   fd.slider('parameter t', state, 'curveT', 0, 1, 0.005);
   fd.toggle('de Casteljau', state, 'showCasteljau');
   fd.toggle('control polygon', state, 'showPolygon');
   fd.toggle('animate along curve', state, 'animateCurve');
+  fd.toggle('extrude surface (bonus)', state, 'showExtrusion', () => { extrudeDirty = true; });
+  fd.slider('extrude width', state, 'extrudeWidth', 0.02, 0.14, 0.005, () => { extrudeDirty = true; });
+  fd.slider('extrude depth', state, 'extrudeDepth', 0.05, 0.8, 0.01, () => { extrudeDirty = true; });
   fd.button('export JSON', () => {
     const json = curveToJSON({
       painting: getPaintingId?.() ?? 'kavunlu',
@@ -293,6 +318,7 @@ export function createScene({ gpu, renderer, painting, panel, camera, getPaintin
     downloadJSON(json, 'curve.json');
   });
   const curveReadout = fd.text('');
+  fd.note('Bonus: the curve is extruded along +z (painting normal) into a lit triangle mesh.');
 
   function rebuildGraphLocals(time) {
     // Arms mostly upright; when animate is on they swing a little (still readable).
@@ -313,12 +339,14 @@ export function createScene({ gpu, renderer, painting, panel, camera, getPaintin
     /** Called when the painting image (and aspect) changes. */
     onPaintingLoaded() {
       state.ctrl = defaultBezierPoints(painting.aspect);
+      extrudeDirty = true;
     },
 
     update(dt, time) {
       if (state.animateCurve) {
         state.curveT = (state.curveT + dt * 0.15) % 1;
       }
+      if (state.showExtrusion && extrudeDirty) rebuildExtrusion();
       rebuildGraphLocals(time);
       root.updateWorld();
 
@@ -346,7 +374,10 @@ export function createScene({ gpu, renderer, painting, panel, camera, getPaintin
       curveReadout.set(
         `kind: ${state.curveKind}\n` +
         `t = ${state.curveT.toFixed(3)}\n` +
-        `C(t) ≈ (${e.p[0].toFixed(3)}, ${e.p[1].toFixed(3)})`,
+        `C(t) ≈ (${e.p[0].toFixed(3)}, ${e.p[1].toFixed(3)})\n` +
+        (state.showExtrusion
+          ? `extrusion: ${extrudeMesh.triangleCount} tris · depth ${state.extrudeDepth.toFixed(2)}`
+          : 'extrusion: off'),
       );
     },
 
@@ -370,6 +401,16 @@ export function createScene({ gpu, renderer, painting, panel, camera, getPaintin
           lines.drawAxes(pass, mat4.multiply(viewProj, node.world), renderer);
         }
       });
+
+      // Bonus extrusion (world-space mesh, identity model)
+      if (state.showExtrusion) {
+        if (extrudeDirty) rebuildExtrusion();
+        const id = mat4.identity();
+        meshes.drawMesh(
+          pass, extrudeSlot, extrudeMesh.vertices, viewProj, id,
+          [0.55, 0.72, 0.95, 0.95], renderer,
+        );
+      }
 
       // Part D curve + handles + rider
       lines.drawLines(pass, viewProj, curveLineData(state), renderer);
@@ -410,8 +451,12 @@ export function createScene({ gpu, renderer, painting, panel, camera, getPaintin
       state.showCasteljau = false;
       state.showPolygon = true;
       state.animateCurve = false;
+      state.showExtrusion = true;
+      state.extrudeWidth = 0.055;
+      state.extrudeDepth = 0.32;
       state.ctrl = initialCtrl();
       state.dragIndex = -1;
+      extrudeDirty = true;
     },
 
     /**
@@ -447,6 +492,7 @@ export function createScene({ gpu, renderer, painting, panel, camera, getPaintin
         state.ctrl[i] = [worldPoint[0], worldPoint[1], 0];
         if (state.curveKind === 'bezier-c1') enforceC1(state.ctrl, i);
       }
+      extrudeDirty = true;
     },
 
     pointerUp() {

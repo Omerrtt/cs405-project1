@@ -32,7 +32,9 @@ export function createMeshDrawer(gpu) {
       targets: [{ format: gpu.viewFormat }],
       constants: fragmentConstants(gpu),
     },
-    primitive: { topology: 'triangle-list', cullMode: 'back' },
+    // none: the extruded ribbon is a shell; back-face culling punched holes when orbiting.
+    // Closed cubes still look the same (two-sided lighting in the shader).
+    primitive: { topology: 'triangle-list', cullMode: 'none' },
     depthStencil: { format: DEPTH_FORMAT, depthWriteEnabled: true, depthCompare: 'less' },
   });
 
@@ -80,7 +82,39 @@ export function createMeshDrawer(gpu) {
     renderer.countDraw(cubeCount);
   }
 
-  return { alloc, drawCube, cubeCount };
+  /** Dynamic triangle-list mesh: interleaved [x,y,z,nx,ny,nz]. */
+  let dynBuffer = null;
+  let dynCapacity = 0;
+  function ensureDyn(bytes) {
+    if (dynBuffer && dynCapacity >= bytes) return;
+    dynBuffer?.destroy();
+    dynCapacity = Math.max(bytes, 65536);
+    dynBuffer = device.createBuffer({
+      label: 'dynamic-mesh',
+      size: dynCapacity,
+      usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,
+    });
+  }
+
+  function drawMesh(pass, slot, interleaved, mvp, model, color, renderer) {
+    if (!interleaved || interleaved.length < 18) return;
+    ensureDyn(interleaved.byteLength);
+    const data = new Float32Array(36);
+    data.set(mvp, 0);
+    data.set(model, 16);
+    data[32] = color[0]; data[33] = color[1]; data[34] = color[2];
+    data[35] = color[3] ?? 1;
+    device.queue.writeBuffer(slot.uniforms, 0, data);
+    device.queue.writeBuffer(dynBuffer, 0, interleaved);
+    pass.setPipeline(pipeline);
+    pass.setBindGroup(0, slot.bindGroup);
+    pass.setVertexBuffer(0, dynBuffer);
+    const n = interleaved.length / 6;
+    pass.draw(n);
+    renderer.countDraw(n);
+  }
+
+  return { alloc, drawCube, drawMesh, cubeCount };
 }
 
 export function createLineDrawer(gpu) {

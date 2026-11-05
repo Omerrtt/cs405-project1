@@ -29,7 +29,8 @@ fn fs(input: VSOut) -> @location(0) vec4f {
   let n = normalize(input.worldN);
   let light = normalize(vec3f(0.35, 0.85, 0.45));
   let ambient = 0.28;
-  let diffuse = max(dot(n, light), 0.0);
+  // abs: both sides of a ribbon stay lit when the camera orbits (no black backs).
+  let diffuse = abs(dot(n, light));
   let lit = ambient + (1.0 - ambient) * diffuse;
   return toOutput(vec4f(u.color.rgb * lit, u.color.a));
 }
