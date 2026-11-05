@@ -136,11 +136,21 @@ async function main() {
 
   const cf = panel.folder('Camera');
   const camStatus = cf.text('');
-  cf.select('projection', ['perspective', 'orthographic'], camera.projection, (v) => { camera.projection = v; });
-  cf.slider('fovY (°)', { v: camera.fovY * 180 / Math.PI }, 'v', 20, 90, 1, (v) => { camera.fovY = v * Math.PI / 180; });
-  cf.slider('near', camera, 'near', 0.05, 5, 0.05);
-  cf.slider('far', camera, 'far', 5, 200, 1);
+  // Handout Part C: show eye, target, fov, near, far; allow projection switch.
+  // Wheel zoom changes orbit distance (eye), not fov/near/far — that is intentional.
+  const fovUI = { deg: camera.fovY * 180 / Math.PI };
+  const projSelect = cf.select('projection', ['perspective', 'orthographic'], camera.projection, (v) => { camera.projection = v; });
+  const fovSlider = cf.slider('fovY (°)', fovUI, 'deg', 20, 90, 1, (v) => { camera.fovY = v * Math.PI / 180; });
+  const nearSlider = cf.slider('near', camera, 'near', 0.05, 5, 0.05);
+  const farSlider = cf.slider('far', camera, 'far', 5, 200, 1);
   const camReadout = cf.text('');
+  const syncCameraUI = () => {
+    fovUI.deg = camera.fovY * 180 / Math.PI;
+    fovSlider.update();
+    nearSlider.update();
+    farSlider.update();
+    projSelect.set(camera.projection);
+  };
 
   scene = createScene({
     gpu, renderer, painting, panel, camera,
@@ -156,6 +166,7 @@ async function main() {
   vf.button('reset', () => {
     Object.assign(camera, createCamera());
     orb = orbitStateFromCamera(camera);
+    syncCameraUI();
     scene.reset();
   });
   vf.note(gpu.encodeSRGB ? 'sRGB: encoded in shader (fallback)' : 'sRGB: canvas -srgb view');

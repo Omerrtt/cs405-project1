@@ -12,7 +12,8 @@ import * as vec3 from '../math/vec3.js';
 import * as curves from '../math/curves.js';
 import { SceneNode } from './node.js';
 import { createMeshDrawer, createLineDrawer } from '../render/mesh.js';
-import { curveToJSON, downloadJSON } from './curveExport.js';
+import { curveToJSON, downloadJSON, ctrlFromJSON } from './curveExport.js';
+import savedCurve from '../../curve.json';
 
 function mulAll(...ms) {
   return ms.reduce((a, b) => mat4.multiply(a, b));
@@ -30,28 +31,16 @@ function uvToWorld(u, v, aspect) {
   return [(2 * u - 1) * aspect, 1 - 2 * v, 0];
 }
 
-/**
- * Default piecewise Bézier (3 segments) along the melon silhouette on
- * Kavunlu Natürmort. Tuned in UV against public/paintings/kavunlu.jpg.
- */
+/** Default curve: exported `curve.json` (melon silhouette). Fallback if missing. */
 function defaultBezierPoints(aspect) {
-  const a = aspect;
-  // 4 knots around the fruit: left cut → top → right → bottom slice
-  //          knot / handle positions in (u, v)
+  const fromFile = ctrlFromJSON(savedCurve, aspect);
+  if (fromFile?.length) return fromFile;
   const uv = [
-    [0.10, 0.40], // P0  left (cut end)
-    [0.18, 0.22], // P1
-    [0.32, 0.14], // P2
-    [0.50, 0.15], // P3  top
-    [0.68, 0.16], // P4  (C¹ will overwrite from P2,P3)
-    [0.86, 0.28], // P5
-    [0.90, 0.45], // P6  right
-    [0.80, 0.68], // P7
-    [0.58, 0.78], // P8
-    [0.32, 0.72], // P9  bottom of foreground slice
+    [0.27, 0.55], [0.11, 0.28], [0.35, 0.12], [0.52, 0.11],
+    [0.69, 0.10], [0.91, 0.23], [0.89, 0.50],
+    [0.86, 0.77], [0.90, 0.35], [0.27, 0.55],
   ];
-  const pts = uv.map(([u, v]) => uvToWorld(u, v, a));
-  // Enforce C¹ at interior joints (indices 3 and 6)
+  const pts = uv.map(([u, v]) => uvToWorld(u, v, aspect));
   for (const k of [3, 6]) {
     if (pts[k - 1] && pts[k + 1]) pts[k + 1] = curves.c1NextControl(pts[k - 1], pts[k]);
   }

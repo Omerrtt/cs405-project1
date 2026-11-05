@@ -46,6 +46,27 @@ export function curveToJSON(curve) {
   return out;
 }
 
+/**
+ * Rebuild flat world-space control points from an exported curve JSON
+ * (segments in normalised painting UV).
+ */
+export function ctrlFromJSON(json, aspect) {
+  const toWorld = (u, v) => [(2 * u - 1) * aspect, 1 - 2 * v, 0];
+  if (json.kind === 'bezier-c1' && json.segments?.length) {
+    const pts = [];
+    json.segments.forEach((seg, i) => {
+      const world = seg.map(([u, v]) => toWorld(u, v));
+      if (i === 0) pts.push(...world);
+      else pts.push(world[1], world[2], world[3]); // skip shared joint
+    });
+    return pts;
+  }
+  if (json.points?.length) {
+    return json.points.map(([u, v]) => toWorld(u, v));
+  }
+  return null;
+}
+
 /** Provided: save any object as a .json download in the browser. */
 export function downloadJSON(obj, filename = 'curve.json') {
   const blob = new Blob([JSON.stringify(obj, null, 2)], { type: 'application/json' });
